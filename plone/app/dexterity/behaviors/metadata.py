@@ -1,3 +1,8 @@
+from zope.interface import provider
+from zope.schema.interfaces import IContextAwareDefaultFactory
+from Products.CMFPlone.interfaces.siteroot import IPloneSiteRoot
+from zope.component.hooks import getSite
+from Products.CMFCore.utils import getToolByName
 from AccessControl.SecurityManagement import getSecurityManager
 from DateTime import DateTime
 from datetime import datetime
@@ -22,6 +27,31 @@ from plone.app.dexterity import PloneMessageFactory as _PMF
 # These schemata duplicate the fields of zope.dublincore.IZopeDublinCore,
 # in order to annotate them with form hints and more helpful titles
 # and descriptions.
+
+@provider(IContextAwareDefaultFactory)
+def default_language(context):
+    # If we are adding a new object, context will be the folderish object where
+    # this new content is being added
+    language = None
+
+    if context is not None and not IPloneSiteRoot.providedBy(context):
+        language = context.Language()
+        if not language:
+            # If we are here, it means we were editing an object that didn't
+            # have its language set or that the container where we were adding
+            # the new content didn't have a language set. So we check its
+            # parent, unless we are at site's root, in which case we get site's
+            # default language
+            if not IPloneSiteRoot.providedBy(context.aq_parent):
+                language = context.aq_parent.Language()
+
+    if not language:
+        # Finally, if we still don't have a language, then just use site's
+        # default
+        pl = getToolByName(getSite(), 'portal_languages')
+        language = pl.getDefaultLanguage()
+
+    return language
 
 class IBasic(form.Schema):
     # default fieldset
@@ -66,6 +96,7 @@ class ICategorization(form.Schema):
         vocabulary = 'plone.app.vocabularies.AvailableContentLanguages',
         required = False,
         missing_value = '',
+        defaultFactory=default_language,
         )
 
     form.omitted('subjects', 'language')
